@@ -11,8 +11,8 @@ import sys
 
 import workflows
 import workflows.contrib.start_service
-from workflows.transport.stomp_transport import StompTransport
 import zocalo
+from zocalo.configuration import transport_from_config
 
 
 def start_service():
@@ -59,14 +59,11 @@ class ServiceStarter(workflows.contrib.start_service.ServiceStarter):
         self.setup_logging()
 
         # change settings when in live mode
-        default_configuration = "/dls_sw/apps/zocalo/secrets/credentials-testing.cfg"
         if "--live" in sys.argv:
             self.use_live_infrastructure = True
-            default_configuration = "/dls_sw/apps/zocalo/secrets/credentials-live.cfg"
         else:
             self.use_live_infrastructure = False
-        if os.path.exists(default_configuration):
-            StompTransport.load_configuration_file(default_configuration)
+        transport_from_config(env="live" if "--live" in sys.argv else "test")
 
     def on_parser_preparation(self, parser):
         parser.add_option(
@@ -132,6 +129,19 @@ class ServiceStarter(workflows.contrib.start_service.ServiceStarter):
     def on_frontend_preparation(self, frontend):
         if self.options.service_restart:
             frontend.restart_service = True
+
+        def logging_call(record):
+            if frontend._transport.is_connected():
+                try:
+                    record = record.__dict__["records"]
+                except Exception:
+                    record = record.__dict__
+                frontend._transport.broadcast("transient.log", record)
+
+        amq_handler = workflows.logging.CallbackHandler(logging_call)
+        if not self.options.verbose:
+            amq_handler.setLevel(logging.WARNING)
+        logging.getLogger().addHandler(amq_handler)
 
         extended_status = {"zocalo": zocalo.__version__}
         if self.options.tag:

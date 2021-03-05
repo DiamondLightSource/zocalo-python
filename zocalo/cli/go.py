@@ -17,6 +17,8 @@ import workflows
 from workflows.transport.stomp_transport import StompTransport
 import workflows.recipe
 
+from zocalo.configuration import transport_from_config, config
+
 # Example: zocalo.go -r example-xia2 527189
 
 
@@ -36,7 +38,8 @@ def run():
         metavar="RCP",
         action="append",
         default=[],
-        help="Name of a recipe to run. Can be used multiple times. Recipe names correspond to filenames (excluding .json) in /dls_sw/apps/zocalo/live/recipes",
+        help="Name of a recipe to run. Can be used multiple times. "
+        + "Names correspond to recipes stored in a site-wide central repository",
     )
     parser.add_option(
         "-a",
@@ -47,16 +50,6 @@ def run():
         type="string",
         default=None,
         help="An auto processing scaling ID for downstream processing recipes.",
-    )
-    parser.add_option(
-        "-f",
-        "--file",
-        dest="recipefile",
-        metavar="FILE",
-        action="store",
-        type="string",
-        default="",
-        help="Run recipe contained in this file.",
     )
     parser.add_option(
         "-n",
@@ -113,14 +106,12 @@ def run():
         default=False,
         help="Run in ActiveMQ testing (zocdev) namespace",
     )
-    default_configuration = "/dls_sw/apps/zocalo/secrets/credentials-live.cfg"
     allow_stomp_fallback = not any("stomp" in s.lower() for s in sys.argv)
     if "--test" in sys.argv:
-        default_configuration = "/dls_sw/apps/zocalo/secrets/credentials-testing.cfg"
         allow_stomp_fallback = False
     # override default stomp host
     try:
-        StompTransport.load_configuration_file(default_configuration)
+        transport_from_config(env="test" if "--test" in sys.argv else "live")
     except workflows.Error as e:
         print("Error: %s\n" % str(e))
         allow_stomp_fallback = False
@@ -139,7 +130,7 @@ def run():
             json.dumps({"headers": headers, "message": message}, indent=2) + "\n"
         )
 
-        fallback = os.path.join("/dls_sw/apps/zocalo/dropfiles", str(uuid.uuid4()))
+        fallback = os.path.join(config["dropfile_path"], str(uuid.uuid4()))
         if options.dryrun:
             print("Not storing message in %s (running with --dry-run)" % fallback)
             return
@@ -188,25 +179,12 @@ def run():
         key, value = kv.split("=", 1)
         message["parameters"][key] = value
 
-    if (
-        not options.recipe
-        and not options.recipefile
-        and not options.nodcid
-        and not options.reprocess
-    ):
+    if not options.recipe and not options.nodcid and not options.reprocess:
         sys.exit("No recipes specified.")
-
-    if options.recipefile:
-        with open(options.recipefile) as fh:
-            custom_recipe = workflows.recipe.Recipe(json.load(fh))
-        custom_recipe.validate()
-        message["custom_recipe"] = custom_recipe.recipe
 
     if options.nodcid:
         if options.recipe:
             print("Running recipes", options.recipe)
-        if options.recipefile:
-            print("Running recipe from file", options.recipefile)
         print("without specified data collection.")
         send_to_stomp_or_defer(message)
         print("\nSubmitted.")
@@ -233,10 +211,7 @@ def run():
     if message["recipes"]:
         print("Running recipes", message["recipes"])
 
-    if options.recipefile:
-        print("Running recipe from file", options.recipefile)
-
-    if not message["recipes"] and not message.get("custom_recipe"):
+    if not message["recipes"]:
         sys.exit("No recipes specified.")
     print("for data collection", dcid)
     message["parameters"]["ispyb_dcid"] = dcid

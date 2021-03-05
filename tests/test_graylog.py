@@ -3,17 +3,18 @@
 
 from unittest import mock
 import zocalo
+from zocalo.configuration import config
 
 
 @mock.patch("zocalo.logging")
 @mock.patch("zocalo.graypy")
 def test_that_graypy_is_correctly_initialised(graypy, logging):
-    zocalo.enable_graylog(host="127.0.0.2", port=mock.sentinel.port)
+    zocalo.enable_graylog()
     logging.getLogger.return_value.addHandler.assert_called_once_with(
         graypy.GELFUDPHandler.return_value
     )
     graypy.GELFUDPHandler.assert_called_once()
-    assert graypy.GELFUDPHandler.call_args[0] == ("127.0.0.2", mock.sentinel.port,)
+    assert graypy.GELFUDPHandler.call_args[0] == ("127.0.0.1", 12201)
 
 
 @mock.patch("zocalo.logging")
@@ -23,14 +24,17 @@ def test_that_graypy_is_using_sensible_defaults(graypy, logging):
     graypy.GELFUDPHandler.assert_called_once()
     call_args = graypy.GELFUDPHandler.call_args[0]
     assert len(call_args) == 2
-    assert "diamond" in call_args[0]
+    assert "localhost" in call_args[0]
     assert isinstance(call_args[1], int) and call_args[1] > 0
 
 
 @mock.patch("zocalo.logging")
 @mock.patch("zocalo.graypy")
 def test_that_the_hostname_is_resolved(graypy, logging):
-    zocalo.enable_graylog(host="github.com")
+    graylog_config = config.get_plugin("graylog", env=None)
+    graylog_config["host"] = "github.com"
+
+    zocalo.enable_graylog()
     graypy.GELFUDPHandler.assert_called_once()
     call_args = graypy.GELFUDPHandler.call_args[0]
     assert len(call_args) == 2

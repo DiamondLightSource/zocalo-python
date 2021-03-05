@@ -8,7 +8,7 @@ with open("README.rst") as readme_file:
 with open("HISTORY.rst") as history_file:
     history = history_file.read()
 
-requirements = ["graypy", "setuptools", "workflows"]
+requirements = ["graypy", "setuptools", "workflows", "pyyaml", "marshmallow"]
 setup_requirements = []
 test_requirements = ["pytest"]
 
@@ -40,7 +40,14 @@ setup(
         ],
         "libtbx.precommit": ["zocalo = zocalo"],
         "workflows.services": [
-            "Schlockmeister = zocalo.service.schlockmeister:Schlockmeister"
+            "Dispatcher = zocalo.service.dispatcher:Dispatcher",
+            "Runner = zocalo.service.runner:Runner",
+            "Schlockmeister = zocalo.service.schlockmeister:Schlockmeister",
+        ],
+        "zocalo.configuration.plugins": [
+            "stomp = zocalo.configuration.stomp",
+            "graylog = zocalo.configuration.graylog",
+            "jmx = zocalo.configuration.jmx",
         ],
         "zocalo.wrappers": ["dummy = zocalo.wrapper:DummyWrapper"],
     },
